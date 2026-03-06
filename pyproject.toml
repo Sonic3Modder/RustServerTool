@@ -1,0 +1,7 @@
+[project]
+name = "rustservertool"
+version = "0.1.0"
+description = "Simple Rust Manager made in python using pyqt6"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
