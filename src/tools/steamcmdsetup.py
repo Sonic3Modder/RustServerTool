@@ -1,57 +1,62 @@
-import platform
-import subprocess
 import shutil
+import platform
 import distro
+import subprocess
 
-
-def install(install_dir):
+def install():
+    '''Basic SteamCMD Install script for GUI'''
     system = platform.system().lower()
     distro_id = distro.id()
 
-    steamcmd_installed = shutil.which("steamcmd") is not None
-
-    if steamcmd_installed:
+    if shutil.which("steamcmd") is not None:
         return
 
-    if system == "windows":
-        subprocess.run(
-            ["powershell", "-Command", "winget install steamcmd --silent"],
-            check=True
-        )
+    commands = _get_install_commands(system, distro_id)
+    if not commands:
+        print("Unsupported OS/distro")
+        return
 
-    elif system == "linux":
+    for cmd in commands:
+        result = subprocess.run(cmd, text=True)
+        print(result.stdout)  # or pipe to a Qt text widget
+        if result.returncode != 0:
+            print(f"Error: {result.stderr}")
+            return
 
-        if distro_id == "ubuntu":
-            subprocess.run(["sudo", "add-apt-repository", "multiverse"], check=True)
-            subprocess.run(["sudo", "dpkg", "--add-architecture", "i386"], check=True)
-            subprocess.run(["sudo", "apt", "update"], check=True)
-            subprocess.run(["sudo", "apt", "install", "steamcmd", "-y"], check=True)
-
-        elif distro_id == "debian":
-            subprocess.run(["sudo", "apt", "update"], check=True)
-            subprocess.run(["sudo", "apt", "install", "software-properties-common", "-y"], check=True)
-            subprocess.run(["sudo", "apt-add-repository", "non-free"], check=True)
-            subprocess.run(["sudo", "dpkg", "--add-architecture", "i386"], check=True)
-            subprocess.run(["sudo", "apt", "update"], check=True)
-            subprocess.run(["sudo", "apt", "install", "steamcmd", "-y"], check=True)
-
-        elif distro_id in ["fedora", "rhel"]:
-            subprocess.run(["sudo", "dnf", "install", "steamcmd", "-y"], check=True)
-
-        elif distro_id == "gentoo":
-            subprocess.run(["sudo", "emerge", "steamcmd"], check=True)
-
-    elif system == "darwin":
-        subprocess.run(
-            ["/bin/bash", "-c", "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"],
-            check=True
-        )
-        subprocess.run(["brew", "update"], check=True)
-        subprocess.run(["brew", "install", "steamcmd"], check=True)
-
-    steamcmd_installed = shutil.which("steamcmd") is not None
-
-    if steamcmd_installed:
+    if shutil.which("steamcmd") is not None:
         print("steamcmd installed successfully")
     else:
         print("steamcmd installation failed")
+
+
+def _get_install_commands(system, distro_id):
+    if system == "windows":
+        return [["powershell", "-Command", "winget install steamcmd --silent"]]
+    elif system == "linux":
+        if distro_id == "ubuntu":
+            return [
+                ["sudo", "add-apt-repository", "multiverse"],
+                ["sudo", "dpkg", "--add-architecture", "i386"],
+                ["sudo", "apt", "update"],
+                ["sudo", "apt", "install", "steamcmd", "-y"],
+            ]
+        elif distro_id == "debian":
+            return [
+                ["sudo", "apt", "update"],
+                ["sudo", "apt", "install", "software-properties-common", "-y"],
+                ["sudo", "apt-add-repository", "non-free"],
+                ["sudo", "dpkg", "--add-architecture", "i386"],
+                ["sudo", "apt", "update"],
+                ["sudo", "apt", "install", "steamcmd", "-y"],
+            ]
+        elif distro_id in ["fedora", "rhel"]:
+            return [["sudo", "dnf", "install", "steamcmd", "-y"]]
+        elif distro_id == "gentoo":
+            return [["sudo", "emerge", "steamcmd"]]
+    elif system == "darwin":
+        return [
+            ["/bin/bash", "-c", "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"],
+            ["brew", "update"],
+            ["brew", "install", "steamcmd"],
+        ]
+    return None
