@@ -21,7 +21,6 @@ def install():
         print(result.stdout)  # or pipe to a Qt text widget
         if result.returncode != 0:
             print(f"Error: {result.stderr}")
-            return
 
     if shutil.which("steamcmd") is not None:
         print("steamcmd installed successfully")
@@ -31,7 +30,11 @@ def install():
 
 def _get_install_commands(system, distro_id):
     if system == "windows":
-        return [["powershell", "-Command", "winget install steamcmd --silent"]]
+        return [
+            ["powershell", "-Command", "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser"],
+            ["powershell", "-Command", "Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression"],
+            ["powershell", "-Command", "scoop install steamcmd"]
+        ]
     elif system == "linux":
         if distro_id == "ubuntu":
             return [

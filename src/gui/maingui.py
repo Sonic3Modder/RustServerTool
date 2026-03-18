@@ -5,6 +5,7 @@ import shutil
 from datetime import datetime
 from src.tools import steamcmdsetup
 from src.tools import rustserversetup
+from src.tools import playercount
 from pathlib import Path
 import subprocess
 import darkdetect
@@ -12,6 +13,30 @@ import configparser
 import platform
 import os
 import sys
+
+
+# ── NEW: Player count worker ───────────────────────────────────────────────────
+class PlayerCountWorker(QThread):
+    result = pyqtSignal(list)
+
+    def run(self):
+        players = playercount.get_players()
+        self.result.emit(players or [])
+
+
+# ── NEW: SteamCMD install worker ───────────────────────────────────────────────
+class SteamCMDWorker(QThread):
+    output   = pyqtSignal(str)
+    finished = pyqtSignal(bool)
+
+    def run(self):
+        success = False
+        try:
+            steamcmdsetup.install()
+            success = shutil.which("steamcmd") is not None
+        except Exception as e:
+            self.output.emit(f"Error: {e}")
+        self.finished.emit(success)
 
 
 class TitleBar(QWidget):
@@ -160,6 +185,14 @@ class MainWindow(QMainWindow):
         content_layout.addWidget(self.player_label)
 
         self.players = QListWidget()
+        self.players.clear()
+        self.players.clear()
+
+        # ── CHANGED: replaced blocking get_players() call with async worker ──
+        self.players.addItem("Loading players...")
+        self._refresh_players()
+        # ─────────────────────────────────────────────────────────────────────
+
         self.players.setStyleSheet("""
         QListWidget::item {
             padding: 4px;
@@ -167,7 +200,6 @@ class MainWindow(QMainWindow):
         }
         """)
         content_layout.addWidget(self.players)
-
         content_layout.addStretch()
 
         # Run Button
@@ -250,6 +282,23 @@ class MainWindow(QMainWindow):
         self.formatted = now.strftime("%H:%M:%S")
         self.time_label.setText(f"Current time: {self.formatted}")
 
+    # ── NEW: async player refresh ──────────────────────────────────────────────
+    def _refresh_players(self):
+        self.player_count_worker = PlayerCountWorker()
+        self.player_count_worker.result.connect(self._on_players_loaded)
+        self.player_count_worker.start()
+
+    def _on_players_loaded(self, players):
+        self.players.clear()
+        if players:
+            self.players.addItems([
+                f"{p.name} (Time: {p.duration:.1f}s)"
+                for p in players
+            ])
+        else:
+            self.players.addItem("No players found")
+    # ──────────────────────────────────────────────────────────────────────────
+
     def check_install(self):
         steamcmd_exists = shutil.which("steamcmd") is not None
         executable = "RustDedicated.exe" if platform.system() == "Windows" else "RustDedicated"
@@ -265,7 +314,9 @@ class MainWindow(QMainWindow):
             )
             if reply == QMessageBox.StandardButton.Yes:
                 print(f"{self.formatted}: Installing SteamCMD...")
-                steamcmdsetup.install()
+                # ── CHANGED: was steamcmdsetup.install(), now threaded ──────
+                self._start_steamcmd_install()
+                # ─────────────────────────────────────────────────────────────
             else:
                 print(f"{self.formatted}: User canceled SteamCMD installation.")
             return
@@ -291,6 +342,23 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"{self.formatted}: Failed to start server: {e}")
             QMessageBox.critical(self, "Error", f"Failed to start server: {e}")
+
+    # ── NEW: threaded SteamCMD install ─────────────────────────────────────────
+    def _start_steamcmd_install(self):
+        self.run_btn.setEnabled(False)
+        self.steamcmd_worker = SteamCMDWorker()
+        self.steamcmd_worker.output.connect(lambda msg: print(f"{self.formatted}: {msg}"))
+        self.steamcmd_worker.finished.connect(self._on_steamcmd_finished)
+        self.steamcmd_worker.start()
+
+    def _on_steamcmd_finished(self, success: bool):
+        self.run_btn.setEnabled(True)
+        if success:
+            print(f"{self.formatted}: SteamCMD installed successfully.")
+            QApplication.beep()
+        else:
+            QMessageBox.critical(self, "Install Failed", "SteamCMD installation failed.")
+    # ──────────────────────────────────────────────────────────────────────────
 
     def start_install(self):
         self.run_btn.setEnabled(False)
